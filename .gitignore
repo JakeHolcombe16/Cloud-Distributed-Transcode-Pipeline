@@ -1,7 +1,46 @@
 .env
-.env.*
+.env.local
+.env.*.local
+**/.env
+*.pem
+*.key
+*.secret
+
+# Dependencies
 node_modules/
-.next/
+vendor/
+
+# Build Outputs
 bin/
 dist/
+.next/
+out/
+
+# IDE & Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Logs
 *.log
+logs/
+
+# Docker (local data volumes - optional)
+# Uncomment if you want to ignore local docker data
+# docker-data/
+
+# Test Coverage
+coverage/
+*.cover
+*.out
+
+# Temporary Files
+tmp/
+temp/
+*.tmp
