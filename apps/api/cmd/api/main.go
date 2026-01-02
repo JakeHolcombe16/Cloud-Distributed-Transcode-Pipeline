@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/httprate"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/JakeHolcombe16/Cloud-Distributed-Transcode-Pipeline/apps/api/internal/config"
@@ -63,6 +64,12 @@ func main() {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.RequestID)
 	r.Use(corsMiddleware)
+
+	// Rate limiting: 100 requests per minute per IP
+	r.Use(httprate.LimitByIP(100, 1*time.Minute))
+
+	// Limit request body size to 10MB (for video metadata)
+	r.Use(middleware.RequestSize(10 * 1024 * 1024))
 
 	// Routes
 	r.Get("/health", handler.Health)
