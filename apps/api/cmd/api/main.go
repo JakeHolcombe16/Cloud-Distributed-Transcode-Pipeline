@@ -19,6 +19,7 @@ import (
 	"github.com/JakeHolcombe16/Cloud-Distributed-Transcode-Pipeline/apps/api/internal/db"
 	"github.com/JakeHolcombe16/Cloud-Distributed-Transcode-Pipeline/apps/api/internal/handler"
 	"github.com/JakeHolcombe16/Cloud-Distributed-Transcode-Pipeline/apps/api/internal/queue"
+	"github.com/JakeHolcombe16/Cloud-Distributed-Transcode-Pipeline/apps/api/internal/storage"
 )
 
 func main() {
@@ -53,8 +54,24 @@ func main() {
 	defer producer.Close()
 	log.Println("Connected to Redis")
 
+	// Initialize S3/MinIO storage client
+	storageClient, err := storage.New(storage.Config{
+		Endpoint:       cfg.S3Endpoint,
+		PublicEndpoint: cfg.S3PublicEndpoint,
+		AccessKey:      cfg.S3AccessKey,
+		SecretKey:      cfg.S3SecretKey,
+		Bucket:         cfg.S3Bucket,
+		Region:         cfg.S3Region,
+		UsePathStyle:   cfg.S3UsePathStyle,
+	})
+	if err != nil {
+		log.Fatalf("Failed to initialize storage client: %v", err)
+	}
+	log.Println("Connected to S3/MinIO")
+
 	// Initialize handlers
 	jobHandler := handler.NewJobHandler(queries, producer)
+	storageHandler := handler.NewStorageHandler(storageClient)
 
 	// Set up router
 	r := chi.NewRouter()
@@ -73,6 +90,10 @@ func main() {
 
 	// Routes
 	r.Get("/health", handler.Health)
+
+	// Storage routes (presigned URLs)
+	r.Get("/upload-url", storageHandler.GetUploadURL)
+	r.Get("/download-url/*", storageHandler.GetDownloadURL)
 
 	r.Route("/jobs", func(r chi.Router) {
 		r.Post("/", jobHandler.CreateJob)
