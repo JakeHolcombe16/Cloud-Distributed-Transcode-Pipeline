@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -18,6 +17,7 @@ import (
 	"github.com/JakeHolcombe16/Cloud-Distributed-Transcode-Pipeline/apps/worker/internal/db"
 	"github.com/JakeHolcombe16/Cloud-Distributed-Transcode-Pipeline/apps/worker/internal/queue"
 	"github.com/JakeHolcombe16/Cloud-Distributed-Transcode-Pipeline/apps/worker/internal/storage"
+	"github.com/JakeHolcombe16/Cloud-Distributed-Transcode-Pipeline/apps/worker/internal/transcoder"
 )
 
 func main() {
@@ -172,18 +172,17 @@ func processJob(ctx context.Context, queries *db.Queries, store *storage.Storage
 		return markJobFailed(ctx, queries, pgUUID, fmt.Errorf("failed to get renditions: %w", err))
 	}
 
-	// Process each rendition
-	// For now, we just copy the input to outputs
-	// Next time, we'll add FFmpeg transcoding
+	// Process each rendition using FFmpeg transcoding
 	for _, r := range renditions {
-		outputKey := fmt.Sprintf("outputs/%s/%s%s", jobIDStr, r.Resolution, ext)
-		outputPath := filepath.Join(tempDir, r.Resolution+ext)
+		// Output is always .mp4 (H.264 + AAC)
+		outputKey := fmt.Sprintf("outputs/%s/%s.mp4", jobIDStr, r.Resolution)
+		outputPath := filepath.Join(tempDir, r.Resolution+".mp4")
 
-		log.Printf("Job %s: processing rendition %s", jobIDStr, r.Resolution)
+		log.Printf("Job %s: transcoding to %s", jobIDStr, r.Resolution)
 
-		// Copy input to output (simulating transcode)
-		if err := copyFile(inputPath, outputPath); err != nil {
-			log.Printf("Job %s: failed to create rendition %s: %v", jobIDStr, r.Resolution, err)
+		// Transcode using FFmpeg
+		if err := transcoder.Transcode(ctx, inputPath, outputPath, r.Resolution); err != nil {
+			log.Printf("Job %s: failed to transcode rendition %s: %v", jobIDStr, r.Resolution, err)
 			continue
 		}
 
@@ -232,22 +231,4 @@ func markJobFailed(ctx context.Context, queries *db.Queries, jobID pgtype.UUID, 
 		log.Printf("Failed to mark job as failed: %v", err)
 	}
 	return jobErr
-}
-
-// copyFile copies a file from src to dst
-func copyFile(src, dst string) error {
-	sourceFile, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer sourceFile.Close()
-
-	destFile, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer destFile.Close()
-
-	_, err = io.Copy(destFile, sourceFile)
-	return err
 }
