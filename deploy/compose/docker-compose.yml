@@ -8,6 +8,14 @@
 #   cp env.template .env
 #   # Edit .env as needed
 #   docker compose up --build
+#
+# Services available at:
+#   - API:              http://localhost:8080
+#   - GraphQL:          http://localhost:8081
+#   - GraphQL Playground: http://localhost:8081/
+#   - Prometheus:       http://localhost:9090
+#   - Grafana:          http://localhost:3001 (admin/admin)
+#   - MinIO Console:    http://localhost:9001
 
 services:
   postgres:
@@ -95,6 +103,22 @@ services:
       minio-init:
         condition: service_completed_successfully
 
+  graphql:
+    build:
+      context: ../../apps/graphql
+      dockerfile: Dockerfile
+    environment:
+      PORT: ${GRAPHQL_PORT:-8081}
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-transcode}?sslmode=disable
+      REDIS_ADDR: redis:6379
+    ports:
+      - "${GRAPHQL_PORT:-8081}:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   worker:
     build:
       context: ../../apps/worker
@@ -116,6 +140,39 @@ services:
       minio-init:
         condition: service_completed_successfully
 
+  # Observability Stack
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ../prometheus:/etc/prometheus
+      - prometheusdata:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    depends_on:
+      - api
+      - graphql
+      - worker
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ../grafana/provisioning:/etc/grafana/provisioning
+      - grafanadata:/var/lib/grafana
+    depends_on:
+      - prometheus
+
 volumes:
   pgdata:
   miniodata:
+  prometheusdata:
+  grafanadata:

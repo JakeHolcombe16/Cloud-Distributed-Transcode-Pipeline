@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/JakeHolcombe16/Cloud-Distributed-Transcode-Pipeline/apps/api/internal/db"
+	"github.com/JakeHolcombe16/Cloud-Distributed-Transcode-Pipeline/apps/api/internal/metrics"
 	"github.com/JakeHolcombe16/Cloud-Distributed-Transcode-Pipeline/apps/api/internal/queue"
 )
 
@@ -70,6 +71,9 @@ func (h *JobHandler) CreateJob(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to create job", http.StatusInternalServerError)
 		return
 	}
+
+	// Record metric for job creation
+	metrics.RecordJobCreated()
 
 	// Convert UUID to string
 	jobID := uuidToString(job.ID)

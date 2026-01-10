@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/JakeHolcombe16/Cloud-Distributed-Transcode-Pipeline/apps/worker/internal/config"
 	"github.com/JakeHolcombe16/Cloud-Distributed-Transcode-Pipeline/apps/worker/internal/db"
+	"github.com/JakeHolcombe16/Cloud-Distributed-Transcode-Pipeline/apps/worker/internal/metrics"
 	"github.com/JakeHolcombe16/Cloud-Distributed-Transcode-Pipeline/apps/worker/internal/queue"
 	"github.com/JakeHolcombe16/Cloud-Distributed-Transcode-Pipeline/apps/worker/internal/storage"
 	"github.com/JakeHolcombe16/Cloud-Distributed-Transcode-Pipeline/apps/worker/internal/transcoder"
@@ -70,6 +72,12 @@ func main() {
 	}
 	log.Println("Connected to S3/MinIO")
 
+	// Start metrics server on port 9091
+	metricsServer := metrics.StartMetricsServer("9091")
+
+	// Start queue depth updater goroutine
+	go metrics.StartQueueDepthUpdater(ctx, consumer.Client(), consumer.QueueKey(), 10*time.Second)
+
 	// Handle shutdown signals
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -78,6 +86,10 @@ func main() {
 		<-quit
 		log.Println("Shutdown signal received, stopping worker...")
 		cancel()
+		// Gracefully shutdown metrics server
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutdownCancel()
+		metricsServer.Shutdown(shutdownCtx)
 	}()
 
 	// Main worker loop
@@ -104,10 +116,15 @@ func main() {
 				continue
 			}
 
-			// Process the job
+			// Process the job with metrics
+			metrics.IncrementActiveJobs()
 			if err := processJob(ctx, queries, storageClient, jobID); err != nil {
 				log.Printf("Error processing job %s: %v", jobID, err)
+				metrics.RecordJobFailed()
+			} else {
+				metrics.RecordJobCompleted()
 			}
+			metrics.DecrementActiveJobs()
 		}
 	}
 }
@@ -180,11 +197,14 @@ func processJob(ctx context.Context, queries *db.Queries, store *storage.Storage
 
 		log.Printf("Job %s: transcoding to %s", jobIDStr, r.Resolution)
 
-		// Transcode using FFmpeg
+		// Transcode using FFmpeg with timing
+		transcodeStart := time.Now()
 		if err := transcoder.Transcode(ctx, inputPath, outputPath, r.Resolution); err != nil {
 			log.Printf("Job %s: failed to transcode rendition %s: %v", jobIDStr, r.Resolution, err)
+			metrics.RecordTranscodeError(r.Resolution)
 			continue
 		}
+		metrics.RecordJobDuration(r.Resolution, time.Since(transcodeStart))
 
 		// Upload output to S3
 		log.Printf("Job %s: uploading rendition %s to %s", jobIDStr, r.Resolution, outputKey)

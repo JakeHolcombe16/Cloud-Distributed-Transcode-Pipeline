@@ -1,0 +1,64 @@
+# GraphQL schema for Cloud Transcode Pipeline
+# This service provides read-only queries for job data
+
+scalar DateTime
+
+type Query {
+  """
+  Get a list of jobs with optional filtering
+  """
+  jobs(limit: Int, offset: Int, status: JobStatus): [Job!]!
+  
+  """
+  Get a single job by ID
+  """
+  job(id: ID!): Job
+  
+  """
+  Get system-wide metrics
+  """
+  systemMetrics: SystemMetrics!
+}
+
+"""
+Represents a transcoding job
+"""
+type Job {
+  id: ID!
+  status: JobStatus!
+  inputKey: String!
+  errorMessage: String
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  renditions: [Rendition!]!
+}
+
+"""
+Represents a single rendition (output format) of a job
+"""
+type Rendition {
+  id: ID!
+  resolution: String!
+  outputKey: String
+}
+
+"""
+System-wide metrics for monitoring
+"""
+type SystemMetrics {
+  queueDepth: Int!
+  totalJobs: Int!
+  completedJobs: Int!
+  failedJobs: Int!
+  processingJobs: Int!
+}
+
+"""
+Status of a transcoding job
+"""
+enum JobStatus {
+  pending
+  processing
+  completed
+  failed
+}

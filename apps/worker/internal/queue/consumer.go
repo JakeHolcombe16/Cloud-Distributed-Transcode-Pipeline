@@ -61,3 +61,12 @@ func (c *Consumer) Close() error {
 	return c.client.Close()
 }
 
+// Client returns the underlying Redis client for metrics collection
+func (c *Consumer) Client() *redis.Client {
+	return c.client
+}
+
+// QueueKey returns the queue key used by this consumer
+func (c *Consumer) QueueKey() string {
+	return JobQueueKey
+}
