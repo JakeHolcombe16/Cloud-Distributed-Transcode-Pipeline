@@ -44,6 +44,7 @@ export interface DownloadURLResponse {
 // Create job request
 export interface CreateJobRequest {
   input_key: string;
+  resolutions: string[];
 }
 
 // Create job response from REST API

@@ -4,6 +4,7 @@ import { use } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useJob } from "@/lib/hooks/use-jobs";
+import { useSystemMetrics } from "@/lib/hooks/use-metrics";
 import { JobStatusPill } from "@/components/jobs/job-status-pill";
 import { JobTimeline } from "@/components/jobs/job-timeline";
 import { OutputsCard } from "@/components/jobs/outputs-card";
@@ -21,7 +22,7 @@ const PipelineViz = dynamic(
   () => import("@/components/three/pipeline-viz"),
   {
     ssr: false,
-    loading: () => <Skeleton className="h-48 w-full" />,
+    loading: () => <Skeleton className="h-64 w-full" />,
   }
 );
 
@@ -32,6 +33,7 @@ interface JobDetailPageProps {
 export default function JobDetailPage({ params }: JobDetailPageProps) {
   const { id } = use(params);
   const { data: job, isLoading, error, refetch } = useJob(id);
+  const { data: metrics } = useSystemMetrics();
 
   const copyId = () => {
     navigator.clipboard.writeText(id);
@@ -189,7 +191,7 @@ export default function JobDetailPage({ params }: JobDetailPageProps) {
           <CardTitle>Pipeline</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <PipelineViz status={job.status} />
+          <PipelineViz status={job.status} metrics={metrics} />
         </CardContent>
       </Card>
 

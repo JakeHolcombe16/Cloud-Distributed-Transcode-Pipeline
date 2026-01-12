@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -189,11 +190,15 @@ func processJob(ctx context.Context, queries *db.Queries, store *storage.Storage
 		return markJobFailed(ctx, queries, pgUUID, fmt.Errorf("failed to get renditions: %w", err))
 	}
 
+	// Extract base filename (without extension) from input key
+	inputBase := filepath.Base(job.InputKey)
+	inputName := strings.TrimSuffix(inputBase, filepath.Ext(inputBase))
+
 	// Process each rendition using FFmpeg transcoding
 	for _, r := range renditions {
 		// Output is always .mp4 (H.264 + AAC)
-		outputKey := fmt.Sprintf("outputs/%s/%s.mp4", jobIDStr, r.Resolution)
-		outputPath := filepath.Join(tempDir, r.Resolution+".mp4")
+		outputKey := fmt.Sprintf("outputs/%s/%s_%s.mp4", jobIDStr, inputName, r.Resolution)
+		outputPath := filepath.Join(tempDir, inputName+"_"+r.Resolution+".mp4")
 
 		log.Printf("Job %s: transcoding to %s", jobIDStr, r.Resolution)
 

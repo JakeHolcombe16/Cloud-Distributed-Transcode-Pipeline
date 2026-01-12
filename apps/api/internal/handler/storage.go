@@ -95,9 +95,9 @@ func (h *StorageHandler) GetUploadURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate unique key: uploads/{uuid}/input{ext}
+	// Generate unique key: uploads/{uuid}/{original_filename}
 	uploadID := uuid.New().String()
-	key := "uploads/" + uploadID + "/input" + ext
+	key := "uploads/" + uploadID + "/" + filename
 
 	// Generate presigned upload URL
 	url, err := h.storage.GenerateUploadURL(r.Context(), key, defaultURLExpiration)

@@ -30,7 +30,8 @@ func NewJobHandler(queries *db.Queries, producer *queue.Producer) *JobHandler {
 
 // CreateJobRequest represents the request body for creating a job
 type CreateJobRequest struct {
-	InputKey string `json:"input_key"`
+	InputKey    string   `json:"input_key"`
+	Resolutions []string `json:"resolutions"`
 }
 
 // JobResponse represents a job in API responses
@@ -79,7 +80,10 @@ func (h *JobHandler) CreateJob(w http.ResponseWriter, r *http.Request) {
 	jobID := uuidToString(job.ID)
 
 	// Create rendition records for each resolution
-	resolutions := []string{"480p", "720p", "1080p"}
+	resolutions := req.Resolutions
+	if len(resolutions) == 0 {
+		resolutions = []string{"480p", "720p", "1080p"} // Default fallback
+	}
 	for _, res := range resolutions {
 		_, err := h.queries.CreateRendition(r.Context(), db.CreateRenditionParams{
 			JobID:      job.ID,

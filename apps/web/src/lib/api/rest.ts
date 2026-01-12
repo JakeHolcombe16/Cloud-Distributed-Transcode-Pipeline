@@ -24,8 +24,8 @@ export async function getDownloadUrl(key: string): Promise<DownloadURLResponse> 
 /**
  * Create a new transcoding job
  */
-export async function createJob(inputKey: string): Promise<CreateJobResponse> {
-  const request: CreateJobRequest = { input_key: inputKey };
+export async function createJob(inputKey: string, resolutions: string[]): Promise<CreateJobResponse> {
+  const request: CreateJobRequest = { input_key: inputKey, resolutions };
   return restApi.post<CreateJobResponse>("/jobs", request);
 }
 

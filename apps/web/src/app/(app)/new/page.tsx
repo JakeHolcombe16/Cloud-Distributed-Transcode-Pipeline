@@ -43,13 +43,21 @@ export default function NewJobPage() {
     const key = await upload(selectedFile);
     if (!key) return;
 
-    // Create job with uploaded file key
-    createJob.mutate(key, {
-      onSuccess: (data) => {
-        // Navigate to job detail page
-        router.push(`/jobs/${data.id}`);
-      },
-    });
+    // Get selected resolutions as array
+    const resolutions = Object.entries(selectedRenditions)
+      .filter(([, selected]) => selected)
+      .map(([resolution]) => resolution);
+
+    // Create job with uploaded file key and selected resolutions
+    createJob.mutate(
+      { inputKey: key, resolutions },
+      {
+        onSuccess: (data) => {
+          // Navigate to job detail page
+          router.push(`/jobs/${data.id}`);
+        },
+      }
+    );
   };
 
   const handleCancel = () => {
@@ -58,7 +66,8 @@ export default function NewJobPage() {
   };
 
   const isSubmitting = isUploading || createJob.isPending;
-  const canSubmit = selectedFile && !isSubmitting && !uploadComplete;
+  const hasSelectedResolutions = Object.values(selectedRenditions).some(Boolean);
+  const canSubmit = selectedFile && !isSubmitting && !uploadComplete && hasSelectedResolutions;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -126,7 +135,7 @@ export default function NewJobPage() {
             ))}
           </div>
           <p className="mt-3 text-xs text-[var(--text-tertiary)]">
-            All resolutions will be generated. This selection is for reference only.
+            Select the resolutions you want to generate. At least one is required.
           </p>
         </CardContent>
       </Card>

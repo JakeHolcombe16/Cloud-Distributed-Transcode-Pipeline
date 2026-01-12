@@ -70,7 +70,8 @@ export function useCreateJob() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (inputKey: string) => createJob(inputKey),
+    mutationFn: ({ inputKey, resolutions }: { inputKey: string; resolutions: string[] }) =>
+      createJob(inputKey, resolutions),
     onSuccess: (data) => {
       // Invalidate jobs list to trigger refetch
       queryClient.invalidateQueries({ queryKey: jobKeys.lists() });
