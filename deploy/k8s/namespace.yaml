@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: transcode
+  labels:
+    app.kubernetes.io/name: transcode-pipeline
+    app.kubernetes.io/part-of: cloud-distributed-transcode

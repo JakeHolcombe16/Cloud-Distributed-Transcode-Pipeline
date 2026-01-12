@@ -44,3 +44,4 @@ coverage/
 tmp/
 temp/
 *.tmp
+deploy/k8s/secrets.yaml

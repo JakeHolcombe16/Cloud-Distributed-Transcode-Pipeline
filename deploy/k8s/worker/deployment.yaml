@@ -1,0 +1,108 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker-metrics
+  namespace: transcode
+  labels:
+    app: worker
+spec:
+  ports:
+    - port: 9091
+      targetPort: 9091
+      name: metrics
+  selector:
+    app: worker
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: transcode
+  labels:
+    app: worker
+spec:
+  replicas: 2  # Start with 2 workers for testing
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9091"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: worker
+          image: transcode-worker:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 9091
+              name: metrics
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: transcode-secrets
+                  key: DATABASE_URL
+            - name: REDIS_ADDR
+              valueFrom:
+                configMapKeyRef:
+                  name: transcode-config
+                  key: REDIS_ADDR
+            - name: S3_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: transcode-config
+                  key: S3_ENDPOINT
+            - name: S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: transcode-secrets
+                  key: S3_ACCESS_KEY
+            - name: S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: transcode-secrets
+                  key: S3_SECRET_KEY
+            - name: S3_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: transcode-config
+                  key: S3_BUCKET
+            - name: S3_REGION
+              valueFrom:
+                configMapKeyRef:
+                  name: transcode-config
+                  key: S3_REGION
+            - name: S3_USE_PATH_STYLE
+              valueFrom:
+                configMapKeyRef:
+                  name: transcode-config
+                  key: S3_USE_PATH_STYLE
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          # Workers don't expose HTTP endpoints, so use exec probes
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "wget -q --spider http://localhost:9091/metrics || exit 1"
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "wget -q --spider http://localhost:9091/metrics || exit 1"
+            initialDelaySeconds: 15
+            periodSeconds: 20

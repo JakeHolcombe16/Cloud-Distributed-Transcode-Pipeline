@@ -87,11 +87,93 @@ A distributed video transcoding pipeline built with Go, demonstrating cloud-nati
 
 ### Prerequisites
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) with Kubernetes enabled
 - [Go 1.23+](https://golang.org/dl/) (for local development)
 - [Node.js 20+](https://nodejs.org/) (for frontend)
 
-### Running with Docker
+## Deployment Options
+
+### Option 1: Kubernetes
+
+**Important: Secrets Setup**
+
+To set up secrets:
+
+```powershell
+# Option A: Use kubectl (recommended for quick start)
+kubectl create namespace transcode
+kubectl create secret generic transcode-secrets \
+  --namespace=transcode \
+  --from-literal=POSTGRES_PASSWORD=your_password \
+  --from-literal=S3_ACCESS_KEY=your_access_key \
+  --from-literal=S3_SECRET_KEY=your_secret_key
+
+# Option B: Use YAML file (for production)
+# 1. Copy the example template
+cp deploy/k8s/secrets.yaml.example deploy/k8s/secrets.yaml
+
+# 2. Edit deploy/k8s/secrets.yaml and replace all CHANGE_ME values)
+
+# 3. Apply the secrets
+kubectl apply -f deploy/k8s/secrets.yaml
+```
+
+**Quick Start:**
+```powershell
+# Enable Kubernetes in Docker Desktop first!
+# Settings -> Kubernetes -> Enable Kubernetes -> Apply & Restart
+
+# 1. Create namespace and secrets (using default dev credentials)
+kubectl create namespace transcode
+kubectl create secret generic transcode-secrets \
+  --namespace=transcode \
+  --from-literal=POSTGRES_PASSWORD=postgres \
+  --from-literal=S3_ACCESS_KEY=minioadmin \
+  --from-literal=S3_SECRET_KEY=minioadmin
+
+# 2. Build Docker images
+docker build -t transcode-api:latest -f apps/api/Dockerfile .
+docker build -t transcode-graphql:latest -f apps/graphql/Dockerfile .
+docker build -t transcode-worker:latest -f apps/worker/Dockerfile .
+docker build -t transcode-web:latest -f apps/web/Dockerfile ./apps/web
+
+# 3. Deploy all services
+kubectl apply -f deploy/k8s/postgres/
+kubectl apply -f deploy/k8s/redis/
+kubectl apply -f deploy/k8s/minio/
+kubectl apply -f deploy/k8s/api/
+kubectl apply -f deploy/k8s/graphql/
+kubectl apply -f deploy/k8s/worker/
+kubectl apply -f deploy/k8s/monitoring/
+kubectl apply -f deploy/k8s/web/
+
+# 4. Wait for pods to be ready
+kubectl get pods -n transcode -w
+
+# 5. Access services via port-forwarding
+kubectl port-forward -n transcode svc/web 3001:3000        # Frontend
+kubectl port-forward -n transcode svc/grafana 3000:3000    # Grafana
+kubectl port-forward -n transcode svc/api 8080:8080        # API
+```
+
+**Restarting After Docker Desktop Restart:**
+```powershell
+# Kubernetes automatically restarts all pods when Docker starts!
+# Just check the status:
+kubectl get pods -n transcode
+
+# Then set up port forwarding:
+kubectl port-forward -n transcode svc/web 3001:3000
+kubectl port-forward -n transcode svc/grafana 3000:3000
+```
+
+**Access Services:**
+- **Frontend:** http://localhost:3001
+- **Grafana:** http://localhost:3000 (admin/admin)
+- **REST API:** http://localhost:8080
+- **GraphQL:** http://localhost:8081
+
+### Option 2: Docker Compose (Quick Local Testing)
 
 ```bash
 # 1. Navigate to compose directory
@@ -110,6 +192,7 @@ docker compose up --build
 #    - GraphQL Playground: http://localhost:8081/
 #    - Prometheus:       http://localhost:9090
 #    - Grafana:          http://localhost:3001 (admin/admin)
+#    - Front-End GUI:    http://localhost:3000
 #    - MinIO Console:    http://localhost:9001
 #    - PostgreSQL:       localhost:5432
 #    - Redis:            localhost:6379

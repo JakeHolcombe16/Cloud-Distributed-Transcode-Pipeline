@@ -44,7 +44,7 @@ func (q *Queries) CountJobsByStatus(ctx context.Context) (CountJobsByStatusRow, 
 
 const getJob = `-- name: GetJob :one
 
-SELECT id, input_key, status, error_message, created_at, updated_at FROM jobs
+SELECT id, input_key, status, error_message, retry_count, max_retries, started_at, worker_id, created_at, updated_at FROM jobs
 WHERE id = $1
 `
 
@@ -57,6 +57,10 @@ func (q *Queries) GetJob(ctx context.Context, id pgtype.UUID) (Job, error) {
 		&i.InputKey,
 		&i.Status,
 		&i.ErrorMessage,
+		&i.RetryCount,
+		&i.MaxRetries,
+		&i.StartedAt,
+		&i.WorkerID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -96,7 +100,7 @@ func (q *Queries) GetRenditionsByJobID(ctx context.Context, jobID pgtype.UUID) (
 }
 
 const listJobs = `-- name: ListJobs :many
-SELECT id, input_key, status, error_message, created_at, updated_at FROM jobs
+SELECT id, input_key, status, error_message, retry_count, max_retries, started_at, worker_id, created_at, updated_at FROM jobs
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2
 `
@@ -120,6 +124,10 @@ func (q *Queries) ListJobs(ctx context.Context, arg ListJobsParams) ([]Job, erro
 			&i.InputKey,
 			&i.Status,
 			&i.ErrorMessage,
+			&i.RetryCount,
+			&i.MaxRetries,
+			&i.StartedAt,
+			&i.WorkerID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -134,7 +142,7 @@ func (q *Queries) ListJobs(ctx context.Context, arg ListJobsParams) ([]Job, erro
 }
 
 const listJobsByStatus = `-- name: ListJobsByStatus :many
-SELECT id, input_key, status, error_message, created_at, updated_at FROM jobs
+SELECT id, input_key, status, error_message, retry_count, max_retries, started_at, worker_id, created_at, updated_at FROM jobs
 WHERE status = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
@@ -160,6 +168,10 @@ func (q *Queries) ListJobsByStatus(ctx context.Context, arg ListJobsByStatusPara
 			&i.InputKey,
 			&i.Status,
 			&i.ErrorMessage,
+			&i.RetryCount,
+			&i.MaxRetries,
+			&i.StartedAt,
+			&i.WorkerID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {

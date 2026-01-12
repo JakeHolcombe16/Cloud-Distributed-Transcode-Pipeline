@@ -1,0 +1,82 @@
+# Horizontal Pod Autoscaler for Worker
+# Scales workers based on CPU usage (simple) or queue depth (requires Prometheus Adapter)
+#
+# For CPU-based scaling (works out of the box):
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: worker-hpa
+  namespace: transcode
+  labels:
+    app: worker
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: worker
+  minReplicas: 1
+  maxReplicas: 10
+  metrics:
+    # CPU-based scaling (fallback, always works)
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300  # Wait 5 min before scaling down
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60  # Scale down 1 pod per minute max
+    scaleUp:
+      stabilizationWindowSeconds: 0  # Scale up immediately
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60  # Scale up 2 pods per minute max
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+      selectPolicy: Max
+---
+# Queue-depth based HPA (requires Prometheus Adapter)
+# Uncomment this and comment out the above HPA to use queue-depth scaling
+#
+# apiVersion: autoscaling/v2
+# kind: HorizontalPodAutoscaler
+# metadata:
+#   name: worker-hpa-queue
+#   namespace: transcode
+#   labels:
+#     app: worker
+# spec:
+#   scaleTargetRef:
+#     apiVersion: apps/v1
+#     kind: Deployment
+#     name: worker
+#   minReplicas: 1
+#   maxReplicas: 10
+#   metrics:
+#     - type: Pods
+#       pods:
+#         metric:
+#           name: queue_depth
+#         target:
+#           type: AverageValue
+#           averageValue: "5"  # Scale up when more than 5 jobs per worker
+#   behavior:
+#     scaleDown:
+#       stabilizationWindowSeconds: 300
+#       policies:
+#         - type: Pods
+#           value: 1
+#           periodSeconds: 60
+#     scaleUp:
+#       stabilizationWindowSeconds: 0
+#       policies:
+#         - type: Pods
+#           value: 2
+#           periodSeconds: 60

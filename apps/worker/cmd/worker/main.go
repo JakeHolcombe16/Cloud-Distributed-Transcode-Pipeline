@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -22,6 +23,13 @@ import (
 	"github.com/JakeHolcombe16/Cloud-Distributed-Transcode-Pipeline/apps/worker/internal/storage"
 	"github.com/JakeHolcombe16/Cloud-Distributed-Transcode-Pipeline/apps/worker/internal/transcoder"
 )
+
+// Retry delays for exponential backoff (10s, 30s, 60s)
+var retryDelays = []time.Duration{
+	10 * time.Second,
+	30 * time.Second,
+	60 * time.Second,
+}
 
 func main() {
 	log.Println("Worker starting...")
@@ -57,7 +65,7 @@ func main() {
 		log.Fatalf("Failed to connect to Redis: %v", err)
 	}
 	defer consumer.Close()
-	log.Println("Connected to Redis")
+	log.Printf("Connected to Redis (Worker ID: %s)", consumer.WorkerID())
 
 	// Initialize S3/MinIO storage client
 	storageClient, err := storage.New(storage.Config{
@@ -117,21 +125,141 @@ func main() {
 				continue
 			}
 
-			// Process the job with metrics
+			// Try to acquire distributed lock for this job
+			locked, err := consumer.Lock(ctx, jobID)
+			if err != nil {
+				log.Printf("Error acquiring lock for job %s: %v", jobID, err)
+				continue
+			}
+			if !locked {
+				// Another worker already has this job, skip it
+				log.Printf("Job %s already locked by another worker, skipping", jobID)
+				continue
+			}
+
+			// Process the job with metrics and lock extension
 			metrics.IncrementActiveJobs()
-			if err := processJob(ctx, queries, storageClient, jobID); err != nil {
+			err = processJobWithLock(ctx, queries, storageClient, consumer, jobID)
+			if err != nil {
 				log.Printf("Error processing job %s: %v", jobID, err)
 				metrics.RecordJobFailed()
+				// Handle retry logic
+				handleJobFailure(ctx, queries, consumer, jobID, err)
 			} else {
 				metrics.RecordJobCompleted()
 			}
 			metrics.DecrementActiveJobs()
+
+			// Release the lock
+			if unlockErr := consumer.Unlock(ctx, jobID); unlockErr != nil {
+				log.Printf("Warning: failed to release lock for job %s: %v", jobID, unlockErr)
+			}
 		}
 	}
 }
 
-func processJob(ctx context.Context, queries *db.Queries, store *storage.Storage, jobIDStr string) error {
-	log.Printf("Processing job: %s", jobIDStr)
+// processJobWithLock wraps processJob with a lock extension goroutine
+// to prevent lock expiration during long-running transcodes
+func processJobWithLock(ctx context.Context, queries *db.Queries, store *storage.Storage, consumer *queue.Consumer, jobID string) error {
+	// Create a context that we can cancel when the job completes
+	jobCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// Start a goroutine to extend the lock periodically
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		ticker := time.NewTicker(2 * time.Minute) // Extend every 2 minutes (lock TTL is 5 minutes)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-jobCtx.Done():
+				return
+			case <-ticker.C:
+				if err := consumer.ExtendLock(ctx, jobID, queue.DefaultLockTTL); err != nil {
+					log.Printf("Warning: failed to extend lock for job %s: %v", jobID, err)
+				} else {
+					log.Printf("Job %s: lock extended", jobID)
+				}
+			}
+		}
+	}()
+
+	// Process the job
+	err := processJob(jobCtx, queries, store, consumer.WorkerID(), jobID)
+
+	// Stop the lock extension goroutine
+	cancel()
+	wg.Wait()
+
+	return err
+}
+
+// handleJobFailure handles retry logic for failed jobs
+func handleJobFailure(ctx context.Context, queries *db.Queries, consumer *queue.Consumer, jobIDStr string, jobErr error) {
+	jobUUID, err := uuid.Parse(jobIDStr)
+	if err != nil {
+		log.Printf("Invalid job ID for retry: %s", jobIDStr)
+		return
+	}
+
+	pgUUID := pgtype.UUID{Bytes: jobUUID, Valid: true}
+
+	// Get current job state
+	job, err := queries.GetJob(ctx, pgUUID)
+	if err != nil {
+		log.Printf("Failed to get job %s for retry handling: %v", jobIDStr, err)
+		return
+	}
+
+	// Check if we should retry
+	if job.RetryCount >= job.MaxRetries {
+		// Move to dead letter queue
+		log.Printf("Job %s exceeded max retries (%d), moving to dead letter queue", jobIDStr, job.MaxRetries)
+		if err := consumer.PushDeadLetter(ctx, jobIDStr); err != nil {
+			log.Printf("Failed to push job %s to dead letter queue: %v", jobIDStr, err)
+		}
+		// Mark as failed in database
+		errMsg := fmt.Sprintf("exceeded max retries: %v", jobErr)
+		queries.UpdateJobStatus(ctx, db.UpdateJobStatusParams{
+			ID:           pgUUID,
+			Status:       db.JobStatusFailed,
+			ErrorMessage: &errMsg,
+		})
+		return
+	}
+
+	// Increment retry count in database
+	_, err = queries.IncrementRetryCount(ctx, pgUUID)
+	if err != nil {
+		log.Printf("Failed to increment retry count for job %s: %v", jobIDStr, err)
+		return
+	}
+
+	// Calculate delay based on retry count
+	delayIndex := int(job.RetryCount)
+	if delayIndex >= len(retryDelays) {
+		delayIndex = len(retryDelays) - 1
+	}
+	delay := retryDelays[delayIndex]
+
+	log.Printf("Job %s failed, scheduling retry %d/%d in %v", jobIDStr, job.RetryCount+1, job.MaxRetries, delay)
+
+	// Schedule retry after delay (in a goroutine to not block the worker)
+	go func() {
+		time.Sleep(delay)
+		if err := consumer.Push(context.Background(), jobIDStr); err != nil {
+			log.Printf("Failed to re-queue job %s for retry: %v", jobIDStr, err)
+		} else {
+			log.Printf("Job %s re-queued for retry", jobIDStr)
+		}
+	}()
+}
+
+func processJob(ctx context.Context, queries *db.Queries, store *storage.Storage, workerID string, jobIDStr string) error {
+	log.Printf("Processing job: %s (worker: %s)", jobIDStr, workerID)
 
 	// Parse job ID
 	jobUUID, err := uuid.Parse(jobIDStr)
@@ -144,23 +272,16 @@ func processJob(ctx context.Context, queries *db.Queries, store *storage.Storage
 		Valid: true,
 	}
 
-	// Get job from database
-	job, err := queries.GetJob(ctx, pgUUID)
-	if err != nil {
-		return fmt.Errorf("failed to get job: %w", err)
-	}
-
-	// Update status to processing
-	_, err = queries.UpdateJobStatus(ctx, db.UpdateJobStatusParams{
-		ID:           pgUUID,
-		Status:       db.JobStatusProcessing,
-		ErrorMessage: nil,
+	// Atomically claim the job for processing with worker ID and timestamp
+	job, err := queries.StartJobProcessing(ctx, db.StartJobProcessingParams{
+		ID:       pgUUID,
+		WorkerID: &workerID,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to update job status: %w", err)
+		return fmt.Errorf("failed to claim job for processing: %w", err)
 	}
 
-	log.Printf("Job %s: status set to processing, input_key=%s", jobIDStr, job.InputKey)
+	log.Printf("Job %s: claimed for processing, input_key=%s", jobIDStr, job.InputKey)
 
 	// Create temp directory for this job
 	tempDir, err := os.MkdirTemp("", "transcode-"+jobIDStr)

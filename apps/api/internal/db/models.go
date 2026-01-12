@@ -60,6 +60,10 @@ type Job struct {
 	InputKey     string             `json:"input_key"`
 	Status       JobStatus          `json:"status"`
 	ErrorMessage *string            `json:"error_message"`
+	RetryCount   int32              `json:"retry_count"`
+	MaxRetries   int32              `json:"max_retries"`
+	StartedAt    pgtype.Timestamptz `json:"started_at"`
+	WorkerID     *string            `json:"worker_id"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }

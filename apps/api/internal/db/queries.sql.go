@@ -14,7 +14,7 @@ import (
 const createJob = `-- name: CreateJob :one
 INSERT INTO jobs (input_key, status)
 VALUES ($1, 'queued')
-RETURNING id, input_key, status, error_message, created_at, updated_at
+RETURNING id, input_key, status, error_message, retry_count, max_retries, started_at, worker_id, created_at, updated_at
 `
 
 func (q *Queries) CreateJob(ctx context.Context, inputKey string) (Job, error) {
@@ -25,6 +25,10 @@ func (q *Queries) CreateJob(ctx context.Context, inputKey string) (Job, error) {
 		&i.InputKey,
 		&i.Status,
 		&i.ErrorMessage,
+		&i.RetryCount,
+		&i.MaxRetries,
+		&i.StartedAt,
+		&i.WorkerID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -56,7 +60,7 @@ func (q *Queries) CreateRendition(ctx context.Context, arg CreateRenditionParams
 }
 
 const getJob = `-- name: GetJob :one
-SELECT id, input_key, status, error_message, created_at, updated_at FROM jobs
+SELECT id, input_key, status, error_message, retry_count, max_retries, started_at, worker_id, created_at, updated_at FROM jobs
 WHERE id = $1
 `
 
@@ -68,6 +72,10 @@ func (q *Queries) GetJob(ctx context.Context, id pgtype.UUID) (Job, error) {
 		&i.InputKey,
 		&i.Status,
 		&i.ErrorMessage,
+		&i.RetryCount,
+		&i.MaxRetries,
+		&i.StartedAt,
+		&i.WorkerID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -125,7 +133,7 @@ func (q *Queries) GetRenditionsByJobID(ctx context.Context, jobID pgtype.UUID) (
 }
 
 const listJobs = `-- name: ListJobs :many
-SELECT id, input_key, status, error_message, created_at, updated_at FROM jobs
+SELECT id, input_key, status, error_message, retry_count, max_retries, started_at, worker_id, created_at, updated_at FROM jobs
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2
 `
@@ -149,6 +157,10 @@ func (q *Queries) ListJobs(ctx context.Context, arg ListJobsParams) ([]Job, erro
 			&i.InputKey,
 			&i.Status,
 			&i.ErrorMessage,
+			&i.RetryCount,
+			&i.MaxRetries,
+			&i.StartedAt,
+			&i.WorkerID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -163,7 +175,7 @@ func (q *Queries) ListJobs(ctx context.Context, arg ListJobsParams) ([]Job, erro
 }
 
 const listJobsByStatus = `-- name: ListJobsByStatus :many
-SELECT id, input_key, status, error_message, created_at, updated_at FROM jobs
+SELECT id, input_key, status, error_message, retry_count, max_retries, started_at, worker_id, created_at, updated_at FROM jobs
 WHERE status = $1
 ORDER BY created_at DESC
 `
@@ -182,6 +194,10 @@ func (q *Queries) ListJobsByStatus(ctx context.Context, status JobStatus) ([]Job
 			&i.InputKey,
 			&i.Status,
 			&i.ErrorMessage,
+			&i.RetryCount,
+			&i.MaxRetries,
+			&i.StartedAt,
+			&i.WorkerID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -199,7 +215,7 @@ const updateJobStatus = `-- name: UpdateJobStatus :one
 UPDATE jobs
 SET status = $2, error_message = $3
 WHERE id = $1
-RETURNING id, input_key, status, error_message, created_at, updated_at
+RETURNING id, input_key, status, error_message, retry_count, max_retries, started_at, worker_id, created_at, updated_at
 `
 
 type UpdateJobStatusParams struct {
@@ -216,6 +232,10 @@ func (q *Queries) UpdateJobStatus(ctx context.Context, arg UpdateJobStatusParams
 		&i.InputKey,
 		&i.Status,
 		&i.ErrorMessage,
+		&i.RetryCount,
+		&i.MaxRetries,
+		&i.StartedAt,
+		&i.WorkerID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

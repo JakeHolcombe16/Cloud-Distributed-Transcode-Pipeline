@@ -10,6 +10,10 @@ CREATE TABLE jobs (
     input_key TEXT NOT NULL,              -- S3 key for uploaded file (e.g., "uploads/{id}/input.mp4")
     status job_status NOT NULL DEFAULT 'queued',
     error_message TEXT,                   -- Error details if status = 'failed'
+    retry_count INT NOT NULL DEFAULT 0,   -- Number of retry attempts so far
+    max_retries INT NOT NULL DEFAULT 3,   -- Maximum retry attempts before moving to dead letter
+    started_at TIMESTAMPTZ,               -- When processing started (for timeout detection)
+    worker_id TEXT,                       -- ID of worker currently processing this job
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
