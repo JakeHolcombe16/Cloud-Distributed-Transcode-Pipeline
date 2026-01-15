@@ -1,6 +1,18 @@
+![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go)
+![Next.js](https://img.shields.io/badge/Next.js-16.0-000000?locgo=next.js)
+![React](https://img.shields.io/badge/React-19.2-61DAFB?logo=react)
+![Kubernetes](https://img.shields.io/badge/Kubernetes-Production--Ready-326CE5?logo=kubernetes)
 # Cloud Distributed Transcode Pipeline
 
-A distributed video transcoding pipeline built with Go, demonstrating cloud-native architecture patterns used by platforms like YouTube.
+**Enterprise-grade distributed video transcoding platform** with Kubernetes orchestration, horizontal autoscaling, and full observability. Processes multiple concurrent video files across resolutions (480p-1080p) using microservices architecture and cloud-native patterns.
+
+### Highlights
+
+- **Scalable Architecture**: Kubernetes HPA autoscaling (1-10 workers) based on CPU utilization
+- **Fault Tolerant**: Distributed locking, exponential backoff retries, dead letter queues
+- **Production-Ready**: Prometheus metrics, Grafana dashboards, health checks, graceful shutdown
+- **Modern Stack**: Go 1.23, Next.js 16, React 19, PostgreSQL 16, Redis 7, Kubernetes
+- **Full Observability**: 20+ custom metrics across 5 microservices with real-time dashboards
 
 ## Architecture
 
@@ -56,6 +68,14 @@ A distributed video transcoding pipeline built with Go, demonstrating cloud-nati
    │  └──────────────────┘         └──────────────────┘
    └───────────────────────────────────────────────────
 ```
+## Architecture Decisions
+
+Our system uses **Redis queue with BRPOP** instead of database polling for instant job distribution with zero idle CPU usage. We chose **microservices** over a monolith to enable independent scaling - API handles I/O-bound requests while workers scale 1-10 replicas based on CPU utilization.
+
+**Presigned S3 URLs** allow direct browser-to-storage uploads (bypassing the API for 100MB+ files), and we use **dual APIs** (REST for mutations, GraphQL for flexible queries) to optimize for different access patterns.
+
+For detailed technical rationale and alternatives considered, see [Architecture Documentation](docs/architecture.md).
+
 
 ## Tech Stack
 
@@ -82,6 +102,27 @@ A distributed video transcoding pipeline built with Go, demonstrating cloud-nati
 - **Idempotent processing** - Safe retries on failure
 - **GraphQL Gateway** - Flexible, client-driven queries
 - **Full Observability** - Prometheus metrics + Grafana dashboards
+
+## Screenshots
+
+### Interactive Dashboard with Real-Time Metrics
+![Grafana Dashboard](docs/images/grafana-dashboard.png)
+Comprehensive metrics tracking job throughput, queue depth, active workers, and processing latency across all resolutions.
+
+### Dashboard
+![Job Processing](docs/images/frontend-dash.PNG)
+
+### Job Processing with 3D Pipeline Visualization
+![Job Processing](docs/images/job-processing-3d.png)
+Interactive Three.js visualization showing the data flow through Storage → API → Database → Workers → Outputs.
+
+### GraphQL API Playground
+![GraphQL Queries](docs/images/graphql-playground.png)
+Flexible GraphQL API for querying jobs, filtering by status, and retrieving system metrics.
+
+### Object Storage Browser
+![MinIO Storage](docs/images/minio-storage.png)
+S3-compatible object storage showing uploaded input files and transcoded outputs organized by job ID.
 
 ## Quick Start
 
@@ -368,13 +409,6 @@ Pre-configured dashboard includes:
 | `GRAPHQL_PORT` | GraphQL API server port | `8081` |
 
 See `deploy/compose/env.template` for full list.
-
-## Architecture Decisions
-
-### REST vs GraphQL Separation
-
-- **REST API** handles **mutations** (creates, updates) - job creation, file uploads
-- **GraphQL API** handles **queries** - listing jobs, fetching status, metrics
 
 ### Microservices Pattern
 

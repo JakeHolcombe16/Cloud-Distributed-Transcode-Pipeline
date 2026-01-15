@@ -38,11 +38,14 @@ spec:
           ports:
             - containerPort: 3000
               name: http
-          env:
-            - name: NEXT_PUBLIC_REST_API_URL
-              value: "http://api:8080"
-            - name: NEXT_PUBLIC_GRAPHQL_API_URL
-              value: "http://graphql:8081/query"
+          # Note: For local K8s with port-forwarding, remove the env vars below
+          # to use the defaults (localhost:8080, localhost:8081).
+          # For production with ingress, set these to your public URLs.
+          # env:
+          #   - name: NEXT_PUBLIC_REST_API_URL
+          #     value: "http://localhost:8080"  # or your production API URL
+          #   - name: NEXT_PUBLIC_GRAPHQL_API_URL
+          #     value: "http://localhost:8081/query"  # or your production GraphQL URL
           resources:
             requests:
               cpu: "100m"

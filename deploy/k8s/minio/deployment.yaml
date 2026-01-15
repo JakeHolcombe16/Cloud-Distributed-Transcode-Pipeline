@@ -70,6 +70,10 @@ spec:
                 secretKeyRef:
                   name: transcode-secrets
                   key: S3_SECRET_KEY
+            - name: MINIO_BROWSER_REDIRECT_URL
+              value: "http://localhost:9001"
+            - name: MINIO_SERVER_URL
+              value: "http://localhost:9000"
           volumeMounts:
             - name: minio-data
               mountPath: /data
